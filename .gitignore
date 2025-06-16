@@ -1,0 +1,23 @@
+# Google Service Account Key
+service_account.json
+config.json
+
+# Python bytecode files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# Local environment variables (if you ever switch from config.json)
+.env
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.DS_Store
