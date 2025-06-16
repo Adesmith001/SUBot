@@ -6,19 +6,35 @@ from admin import is_admin, is_super_admin, add_admin, add_super_admin, remove_a
 import scheduler
 from datetime import datetime
 import re # Import for regex validation
+import os # Import os for environment variables
 
-with open('config.json') as f:
-    config = json.load(f)
+# with open('config.json') as f:
+#     config = json.load(f)
 
-BOT_TOKEN = config['BOT_TOKEN']
-SUPER_ADMIN_ID = str(config['SUPER_ADMIN_ID'])
+# BOT_TOKEN = config['BOT_TOKEN']
+# SUPER_ADMIN_ID = str(config['SUPER_ADMIN_ID'])
 
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+SUPER_ADMIN_ID = os.environ.get('SUPER_ADMIN_ID')
+
+# Fallback to config.json if environment variables are not set (for local development)
+if not BOT_TOKEN or not SUPER_ADMIN_ID:
+    try:
+        with open('config.json') as f:
+            config = json.load(f)
+        if not BOT_TOKEN: BOT_TOKEN = config['BOT_TOKEN']
+        if not SUPER_ADMIN_ID: SUPER_ADMIN_ID = str(config['SUPER_ADMIN_ID'])
+    except FileNotFoundError:
+        raise ValueError("BOT_TOKEN or SUPER_ADMIN_ID not found in environment variables or config.json")
+
+
+# New states for ConversationHandler
 REG_FIELD_INPUT, AWAITING_GENDER, AWAITING_COLLEGE, AWAITING_SUBUNIT, AWAITING_CONTACT, AWAITING_REMINDER_DATE, AWAITING_REMINDER_TIME, AWAITING_ADMIN_ID_TO_DELETE, AWAITING_SUPER_ADMIN_ID_TO_DELETE = range(9)
 
 REG_FIELDS_CONFIG = [
     {'name': 'SURNAME', 'type': 'text'},
     {'name': 'OTHER NAMES', 'type': 'text'},
-    {'name': 'DATE OF BIRTH', 'type': 'dob'}, 
+    {'name': 'DATE OF BIRTH', 'type': 'dob'}, # Special type for validation
     {'name': 'GENDER', 'type': 'inline_keyboard', 'options': ['Male', 'Female']},
     {'name': 'REGISTRATION NUMBER', 'type': 'text'},
     {'name': 'COLLEGE', 'type': 'inline_keyboard', 'options': ['College of Science and Technology', 'College of Engineering', 'College of Management and Social Science', 'College of Leadersip Developement Studies']},

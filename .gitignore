@@ -1,4 +1,6 @@
 # Google Service Account Key
+service_account.json
+config.json
 
 # Python bytecode files
 __pycache__/
