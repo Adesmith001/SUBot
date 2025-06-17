@@ -1,7 +1,5 @@
 # Google Service Account Key
 service_account.json
-
-# Bot configuration (contains sensitive info)
 config.json
 
 # Python bytecode files

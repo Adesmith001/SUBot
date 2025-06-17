@@ -4,15 +4,10 @@ import json
 import os
 import base64
 
-# SPREADSHEET_KEY = config['SPREADSHEET_KEY']
-SPREADSHEET_KEY = os.environ.get('SPREADSHEET_KEY')
-if not SPREADSHEET_KEY:
-    try:
-        with open('config.json') as f:
-            config = json.load(f)
-        SPREADSHEET_KEY = config['SPREADSHEET_KEY']
-    except FileNotFoundError:
-        raise ValueError("SPREADSHEET_KEY not found in environment variables or config.json")
+with open('config.json') as f:
+    config = json.load(f)
+
+SPREADSHEET_KEY = config['SPREADSHEET_KEY']
 
 scope = [
     'https://spreadsheets.google.com/feeds',
