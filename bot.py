@@ -1,3 +1,4 @@
+import asyncio
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler, ContextTypes)
@@ -44,7 +45,7 @@ async def _send_next_registration_field(update: Update, context: ContextTypes.DE
         field_type = field_info['type']
 
         if field_type == 'text' or field_type == 'dob':
-            await context.bot.send_message(chat_id=chat_id, text=f"Enter your {field_name}:")
+            await context.bot.send_message(chat_id=chat_id, text=f"Enter your {field_name} (MM-DD-YYYY (e.g., 01-23-2000)):")
             return REG_FIELD_INPUT
         elif field_type == 'inline_keyboard':
             keyboard = [[InlineKeyboardButton(option, callback_data=f"{field_name}_{option}")] for option in field_info['options']]
@@ -297,10 +298,15 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         await update.message.reply_text("Invalid action or state.")
 
-scheduler_send_message = lambda uid, msg: Application.builder().token(BOT_TOKEN).build().bot.send_message(chat_id=uid, text=msg)
-scheduler.set_send_message_func(scheduler_send_message)
+async def initialize_bot(app: Application):
+    """Initializes the bot and sets up the scheduler."""
+    await app.initialize()
+    scheduler_send_message = lambda uid, msg: asyncio.create_task(app.bot.send_message(chat_id=uid, text=msg))
+    scheduler.set_send_message_func(scheduler_send_message)
+    scheduler.start()
 
-def main():
+def create_bot_app():
+    """Creates and configures the Telegram bot application."""
     app = Application.builder().token(BOT_TOKEN).build()
 
     reg_conv = ConversationHandler(
@@ -321,8 +327,19 @@ def main():
     app.add_handler(CommandHandler('admin', admin_panel))
     app.add_handler(CallbackQueryHandler(admin_button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_text_handler))
+    
+    return app
 
+async def main_async():
+    """Async version of main for proper initialization."""
+    app = create_bot_app()
+    await initialize_bot(app)
     app.run_polling()
+
+def main():
+    """Starts the bot in polling mode for local development."""
+    import asyncio
+    asyncio.run(main_async())
 
 if __name__ == '__main__':
     main()
