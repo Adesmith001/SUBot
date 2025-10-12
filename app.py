@@ -18,7 +18,7 @@ if not BOT_TOKEN:
     except FileNotFoundError:
         raise ValueError("BOT_TOKEN not found in environment variables or config.json")
 
-WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
+WEBHOOK_URL = os.environ.get('https://subot-fcup.onrender.com')
 PORT = int(os.environ.get('PORT', 8000))
 
 # Flask app
