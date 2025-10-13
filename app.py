@@ -25,7 +25,7 @@ if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found in environment variables or config.json")
 
 SUPER_ADMIN_ID = str(config['SUPER_ADMIN_ID'])
-WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
+WEBHOOK_URL = str(config['WEBHOOK_URL'])
 PORT = int(os.environ.get('PORT', 8000))
 
 # Conversation states
