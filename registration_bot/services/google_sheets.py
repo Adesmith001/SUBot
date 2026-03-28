@@ -131,6 +131,20 @@ class GoogleSheetsService:
                     return user
         return None
 
+    def get_user_by_registration_number(self, registration_number: str) -> dict[str, Any] | None:
+        target_registration_number = self._normalize_lookup_value(registration_number)
+        if not target_registration_number:
+            return None
+
+        for worksheet in self._semester_sheets():
+            for user in worksheet.get_all_records():
+                if (
+                    self._normalize_lookup_value(user.get("REGISTRATION NUMBER"))
+                    == target_registration_number
+                ):
+                    return user
+        return None
+
     def get_all_telegram_ids(self) -> list[str]:
         return [str(user["TELEGRAM USER ID"]) for user in self.get_all_unique_users()]
 
@@ -169,3 +183,9 @@ class GoogleSheetsService:
         from datetime import datetime
 
         return datetime.now().year
+
+    @staticmethod
+    def _normalize_lookup_value(value: Any) -> str:
+        if value is None:
+            return ""
+        return " ".join(str(value).strip().upper().split())

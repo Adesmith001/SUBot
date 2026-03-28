@@ -15,9 +15,11 @@ from telegram.ext import (
 
 from registration_bot.config import Settings, get_settings
 from registration_bot.constants import (
+    AWAITING_FORM_STATUS,
     AWAITING_COLLEGE,
     AWAITING_CONTACT,
     AWAITING_GENDER,
+    AWAITING_REG_NO_CHECK,
     AWAITING_REGISTERED_ALPHA,
     AWAITING_SEMESTER,
     AWAITING_SUBUNIT,
@@ -66,6 +68,18 @@ def create_bot_application(
     registration_conversation = ConversationHandler(
         entry_points=[CommandHandler("start", registration_handlers.start)],
         states={
+            AWAITING_FORM_STATUS: [
+                CallbackQueryHandler(
+                    registration_handlers.form_status_choice,
+                    pattern=r"^filled_form_",
+                )
+            ],
+            AWAITING_REG_NO_CHECK: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    registration_handlers.registration_number_check,
+                )
+            ],
             AWAITING_SEMESTER: [
                 CallbackQueryHandler(registration_handlers.semester_choice, pattern=r"^semester_")
             ],
@@ -119,4 +133,3 @@ async def initialize_application(application: Application, *, start_app: bool = 
     await start_runtime(application)
     if start_app:
         await application.start()
-

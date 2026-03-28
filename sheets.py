@@ -25,6 +25,10 @@ def get_user_by_telegram_id(telegram_id, semester=None, year=None):
     return _sheets_service.get_user_by_telegram_id(telegram_id, semester=semester, year=year)
 
 
+def get_user_by_registration_number(registration_number):
+    return _sheets_service.get_user_by_registration_number(registration_number)
+
+
 def get_all_telegram_ids():
     return _sheets_service.get_all_telegram_ids()
 
@@ -43,4 +47,3 @@ def get_group_chat_link(subunit=None):
 
 def get_all_users():
     return _sheets_service.get_all_users()
-
