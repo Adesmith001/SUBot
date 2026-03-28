@@ -1,35 +1,38 @@
-import json
-from sheets import get_all_telegram_ids
+from registration_bot.config import get_settings
+from registration_bot.services.admins import AdminService
 
-with open('config.json') as f:
-    config = json.load(f)
 
-SUPER_ADMIN_ID = config['SUPER_ADMIN_ID']
+_admin_service = AdminService(get_settings())
 
-# In production, store admin IDs in a persistent store or Google Sheet
-ADMINS = set()
-SUPER_ADMINS = {str(SUPER_ADMIN_ID)}
 
 def is_super_admin(user_id):
-    return str(user_id) in SUPER_ADMINS
+    return _admin_service.is_super_admin(user_id)
+
 
 def is_admin(user_id):
-    return str(user_id) in ADMINS or is_super_admin(user_id)
+    return _admin_service.is_admin(user_id)
+
 
 def add_admin(user_id):
-    ADMINS.add(str(user_id))
+    return _admin_service.add_admin(user_id)
+
 
 def remove_admin(user_id):
-    ADMINS.discard(str(user_id))
+    return _admin_service.remove_admin(user_id)
+
 
 def add_super_admin(user_id):
-    SUPER_ADMINS.add(str(user_id))
+    return _admin_service.add_super_admin(user_id)
+
 
 def remove_super_admin(user_id):
-    SUPER_ADMINS.discard(str(user_id))
+    return _admin_service.remove_super_admin(user_id)
+
 
 def get_admins():
-    return list(ADMINS)
+    return _admin_service.get_admins()
+
 
 def get_super_admins():
-    return list(SUPER_ADMINS) 
+    return _admin_service.get_super_admins()
+
