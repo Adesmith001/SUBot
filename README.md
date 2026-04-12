@@ -10,32 +10,55 @@ A modular Telegram bot for user registration, admin controls, and scheduled mess
 - Flask webhook for deployment (Render/Railway ready)
 
 ## Project Structure
-- `bot.py` — Main bot logic and handlers
-- `sheets.py` — Google Sheets integration
-- `admin.py` — Admin/superadmin logic
-- `scheduler.py` — Birthday and reminder scheduling
-- `app.py` — Flask app for webhook
-- `config.json` — Configuration (token, spreadsheet, admin)
+- `bot.py` - Main bot logic and handlers
+- `sheets.py` - Google Sheets integration
+- `admin.py` - Admin/superadmin logic
+- `scheduler.py` - Birthday and reminder scheduling
+- `app.py` - Flask app for webhook
+- `registration_bot/config.py` - App settings loader (env first, optional local file fallback)
 
-## Setup
-1. Clone the repo and install dependencies:
+## Secure Setup
+1. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. Set up your Google Service Account and share your sheet with its email.
-3. Fill in `config.json` with your bot token, spreadsheet key, and super admin ID.
-4. Deploy on Render/Railway:
-   - Set `WEBHOOK_URL` and `PORT` as environment variables if needed.
-   - Use `app.py` as the entry point.
+2. Create your local config from the template:
+   ```powershell
+   Copy-Item config.example.json config.json
+   ```
+3. Fill `config.json` with real values (`BOT_TOKEN`, `SPREADSHEET_KEY`, `SUPER_ADMIN_ID`, optional `WEBHOOK_URL`).
+4. Create your local Google credentials file:
+   ```powershell
+   Copy-Item service_account.example.json service_account.json
+   ```
+   Replace the example content with your actual Google service account JSON.
+5. Keep both `config.json` and `service_account.json` local-only. They are gitignored and must never be committed.
+6. Optional: use environment variables from `.env.example` as your template.
+
+## Environment Variables (Recommended in Production)
+`registration_bot/config.py` loads values in this order:
+1. Environment variable
+2. `config.json` local fallback
+
+Required values:
+- `BOT_TOKEN`
+- `SPREADSHEET_KEY`
+- `SUPER_ADMIN_ID`
+
+Optional values:
+- `WEBHOOK_URL`
+- `PORT` (defaults to `8000`)
+- `GOOGLE_SERVICE_ACCOUNT_FILE` (defaults to `service_account.json`)
+- `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS_B64` (base64-encoded full Google credentials JSON)
 
 ## Google Sheets Setup
 - Create a Google Sheet with columns:
   `SURNAME, OTHER NAMES, DATE OF BIRTH, GENDER, REGISTRATION NUMBER, COLLEGE, PROGRAM, LEVEL, SUBUNIT, TELEGRAM NUMBER, HALL & ROOM NUMBER, TELEGRAM USER ID`
-- Download your service account JSON and save as `service_account.json` in the project root.
+- Create a Google service account, download its key JSON, and share the sheet with that service account email.
 
 ## Webhook Deployment
-- Set your webhook URL in Render/Railway environment variables.
-- The bot will listen for Telegram updates via Flask.
+- Set `WEBHOOK_URL` in host environment variables.
+- Use `app.py` as the entry point.
 
 ---
-MIT License 
+MIT License
