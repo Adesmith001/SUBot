@@ -40,6 +40,7 @@ REG_FIELDS_CONFIG = [
         ],
     },
     {"name": "HALL & ROOM NUMBER", "type": "text"},
+    {"name": "ARE YOU A NEW MEMBER", "type": "inline_keyboard", "options": ["Yes", "No"]},
 ]
 
 SUBUNIT_OPTIONS = next(

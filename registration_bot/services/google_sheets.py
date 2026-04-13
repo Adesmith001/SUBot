@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime
 from typing import Any
 
 import gspread
@@ -28,11 +29,13 @@ USER_COLUMNS = [
     "LEVEL",
     "SUBUNIT",
     "HALL & ROOM NUMBER",
+    "ARE YOU A NEW MEM",
     "TELEGRAM USER ID",
     "TELEGRAM NUMBER",
 ]
 
 HEADER_ROW = USER_COLUMNS[:]
+FORM_RESPONSE_SHEET_CANDIDATES = ("Form Responses 1", "Form Response 1")
 
 
 class GoogleSheetsService:
@@ -40,6 +43,7 @@ class GoogleSheetsService:
         self.settings = settings
         self.client = gspread.authorize(self._load_credentials())
         self.spreadsheet = self.client.open_by_key(settings.spreadsheet_key)
+        self.registration_sheet = self._get_or_create_registration_sheet()
         self.links_sheet = self._get_or_create_links_sheet()
 
     def _load_credentials(self) -> ServiceAccountCredentials:
@@ -76,6 +80,36 @@ class GoogleSheetsService:
             if worksheet.title.startswith(("Alpha_", "Omega_"))
         ]
 
+    def _registration_sheets(self):
+        sheets = []
+        for title in FORM_RESPONSE_SHEET_CANDIDATES:
+            try:
+                sheets.append(self.spreadsheet.worksheet(title))
+            except gspread.exceptions.WorksheetNotFound:
+                continue
+        return sheets
+
+    def _get_or_create_registration_sheet(self):
+        for title in FORM_RESPONSE_SHEET_CANDIDATES:
+            try:
+                return self.spreadsheet.worksheet(title)
+            except gspread.exceptions.WorksheetNotFound:
+                continue
+
+        worksheet = self.spreadsheet.add_worksheet(
+            title=FORM_RESPONSE_SHEET_CANDIDATES[0],
+            rows="100",
+            cols="20",
+        )
+        worksheet.append_row(HEADER_ROW)
+        return worksheet
+
+    def _all_user_data_sheets(self):
+        unique_by_title = {}
+        for worksheet in self._registration_sheets():
+            unique_by_title[worksheet.title] = worksheet
+        return list(unique_by_title.values())
+
     def get_or_create_sheet(self, sheet_name: str):
         try:
             return self.spreadsheet.worksheet(sheet_name)
@@ -85,22 +119,18 @@ class GoogleSheetsService:
             return worksheet
 
     def add_user(self, user_data: dict[str, Any]) -> None:
-        year = str(self._current_year())
-        semester = user_data.get("SEMESTER") or user_data.get("semester")
-        values = [user_data.get(column, "") for column in USER_COLUMNS]
+        headers = self.registration_sheet.row_values(1)
+        if not headers:
+            self.registration_sheet.append_row(HEADER_ROW)
+            headers = HEADER_ROW[:]
 
-        if semester == "Both":
-            self.get_or_create_sheet(f"Alpha_{year}").append_row(values)
-            self.get_or_create_sheet(f"Omega_{year}").append_row(values)
-        elif semester == "Omega":
-            self.get_or_create_sheet(f"Omega_{year}").append_row(values)
-        else:
-            self.get_or_create_sheet(f"Alpha_{year}").append_row(values)
+        values = self._build_row_for_headers(headers, user_data)
+        self.registration_sheet.append_row(values)
 
     def get_all_unique_users(self) -> list[dict[str, Any]]:
         all_users = []
         seen_ids = set()
-        for worksheet in self._semester_sheets():
+        for worksheet in self._all_user_data_sheets():
             for record in worksheet.get_all_records():
                 raw_telegram_id = record.get("TELEGRAM USER ID")
                 telegram_id = str(raw_telegram_id).strip()
@@ -116,16 +146,15 @@ class GoogleSheetsService:
         year: int | str | None = None,
     ) -> dict[str, Any] | None:
         if semester and year:
-            try:
-                target_sheet = self.spreadsheet.worksheet(f"{semester}_{year}")
-            except gspread.exceptions.WorksheetNotFound:
-                return None
-            for user in target_sheet.get_all_records():
-                if str(user.get("TELEGRAM USER ID")).strip() == str(telegram_id).strip():
-                    return user
+            for worksheet in self._registration_sheets():
+                for user in worksheet.get_all_records():
+                    if str(user.get("TELEGRAM USER ID")).strip() != str(telegram_id).strip():
+                        continue
+                    if self._record_matches_semester_and_year(user, semester, year):
+                        return user
             return None
 
-        for worksheet in self._semester_sheets():
+        for worksheet in self._all_user_data_sheets():
             for user in worksheet.get_all_records():
                 if str(user.get("TELEGRAM USER ID")).strip() == str(telegram_id).strip():
                     return user
@@ -136,7 +165,7 @@ class GoogleSheetsService:
         if not target_registration_number:
             return None
 
-        for worksheet in self._semester_sheets():
+        for worksheet in self._all_user_data_sheets():
             for user in worksheet.get_all_records():
                 if (
                     self._normalize_lookup_value(user.get("REGISTRATION NUMBER"))
@@ -180,8 +209,6 @@ class GoogleSheetsService:
 
     @staticmethod
     def _current_year() -> int:
-        from datetime import datetime
-
         return datetime.now().year
 
     @staticmethod
@@ -189,3 +216,83 @@ class GoogleSheetsService:
         if value is None:
             return ""
         return " ".join(str(value).strip().upper().split())
+
+    @classmethod
+    def _normalize_header_key(cls, value: Any) -> str:
+        normalized = cls._normalize_lookup_value(value)
+        return "".join(char for char in normalized if char.isalnum())
+
+    @staticmethod
+    def _split_hall_and_room(hall_room: Any) -> tuple[str, str]:
+        text = str(hall_room or "").strip()
+        if not text:
+            return "", ""
+        parts = text.split(maxsplit=1)
+        if len(parts) == 1:
+            return parts[0], ""
+        return parts[0], parts[1]
+
+    def _build_row_for_headers(self, headers: list[str], user_data: dict[str, Any]) -> list[Any]:
+        normalized_user_data = {
+            self._normalize_header_key(key): value for key, value in user_data.items()
+        }
+        hall_room = user_data.get("HALL & ROOM NUMBER", "")
+        hall, room = self._split_hall_and_room(hall_room)
+        timestamp_value = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
+        year_value = str(self._current_year())
+
+        values = []
+        for header in headers:
+            normalized_header = self._normalize_header_key(header)
+            if normalized_header == "TIMESTAMP":
+                values.append(timestamp_value)
+            elif normalized_header in ("HALLROOMNUMBER", "HALLANDROOMNUMBER"):
+                values.append(hall_room)
+            elif normalized_header == "HALL":
+                values.append(hall)
+            elif normalized_header == "ROOMNUMBER":
+                values.append(room)
+            elif normalized_header == "YEAR":
+                values.append(year_value)
+            elif normalized_header in normalized_user_data:
+                values.append(normalized_user_data[normalized_header])
+            else:
+                values.append("")
+        return values
+
+    def _record_matches_semester_and_year(
+        self,
+        record: dict[str, Any],
+        semester: str,
+        year: int | str,
+    ) -> bool:
+        target_semester = self._normalize_lookup_value(semester)
+        record_semester = self._normalize_lookup_value(
+            record.get("SEMESTER") or record.get("Semester")
+        )
+        if not record_semester:
+            return False
+        if record_semester != target_semester and not (
+            record_semester == "BOTH" and target_semester in {"ALPHA", "OMEGA"}
+        ):
+            return False
+
+        target_year = str(year).strip()
+        record_year = self._extract_record_year(record)
+        return bool(record_year and str(record_year).strip() == target_year)
+
+    def _extract_record_year(self, record: dict[str, Any]) -> str | None:
+        year_value = record.get("YEAR") or record.get("Year")
+        if year_value:
+            return str(year_value).strip()
+
+        timestamp = record.get("TIMESTAMP") or record.get("Timestamp")
+        if not timestamp:
+            return None
+
+        for date_format in ("%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return str(datetime.strptime(str(timestamp), date_format).year)
+            except ValueError:
+                continue
+        return None

@@ -132,6 +132,18 @@ async def _send_next_registration_field(update: Update, context: ContextTypes.DE
         await context.bot.send_message(chat_id=chat_id, text=f"Enter your {field_name}:")
         return REG_FIELD_INPUT
 
+    if field_name == "ARE YOU A NEW MEMBER?":
+        keyboard = [
+            [InlineKeyboardButton("Yes", callback_data=f"{field_name}_Yes")],
+            [InlineKeyboardButton("No", callback_data=f"{field_name}_No")],
+        ]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Are you a new member?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return AWAITING_SUBUNIT
+
     keyboard = [
         [InlineKeyboardButton(option, callback_data=f"{field_name}_{option}")]
         for option in field_info["options"]
