@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import calendar
 from datetime import datetime
 
 from telegram import (
@@ -18,10 +18,12 @@ from telegram.ext import ContextTypes, ConversationHandler
 from registration_bot.constants import (
     AWAITING_COLLEGE,
     AWAITING_CONTACT,
+    AWAITING_DOB_DAY,
+    AWAITING_DOB_MONTH,
+    AWAITING_DOB_YEAR,
     AWAITING_FORM_STATUS,
     AWAITING_GENDER,
     AWAITING_REG_NO_CHECK,
-    AWAITING_REGISTERED_ALPHA,
     AWAITING_SEMESTER,
     AWAITING_SUBUNIT,
     REG_FIELD_INPUT,
@@ -31,6 +33,10 @@ from registration_bot.constants import (
     REGISTRATION_INDEX_KEY,
     SEMESTER_KEY,
 )
+
+DOB_YEAR_KEY = "dob_year"
+DOB_MONTH_KEY = "dob_month"
+DOB_DAY_KEY = "dob_day"
 
 
 def _sheets_service(context: ContextTypes.DEFAULT_TYPE):
@@ -46,6 +52,24 @@ def _clear_registration_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop(REGISTRATION_INDEX_KEY, None)
     context.user_data.pop(SEMESTER_KEY, None)
     context.user_data.pop(REG_NO_LOOKUP_MODE_KEY, None)
+    context.user_data.pop(DOB_YEAR_KEY, None)
+    context.user_data.pop(DOB_MONTH_KEY, None)
+    context.user_data.pop(DOB_DAY_KEY, None)
+
+
+def _build_option_keyboard(
+    options: list[str],
+    *,
+    prefix: str,
+    row_size: int = 1,
+) -> InlineKeyboardMarkup:
+    rows = []
+    for index in range(0, len(options), row_size):
+        chunk = options[index : index + row_size]
+        rows.append(
+            [InlineKeyboardButton(option, callback_data=f"{prefix}{option}") for option in chunk]
+        )
+    return InlineKeyboardMarkup(rows)
 
 
 async def _ask_form_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,42 +146,122 @@ async def _send_next_registration_field(update: Update, context: ContextTypes.DE
     field_type = field_info["type"]
 
     if field_type == "dob":
+        current_year = datetime.now().year
+        years = [str(year) for year in range(current_year - 40, current_year + 1)]
+        years.reverse()
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"Enter your {field_name} in MM-DD-YYYY format (e.g., 01-23-2000):",
+            text="Select your birth year:",
+            reply_markup=_build_option_keyboard(years, prefix="dob_year_", row_size=3),
         )
-        return REG_FIELD_INPUT
+        return AWAITING_DOB_YEAR
 
     if field_type == "text":
         await context.bot.send_message(chat_id=chat_id, text=f"Enter your {field_name}:")
         return REG_FIELD_INPUT
 
-    if field_name == "ARE YOU A NEW MEMBER?":
-        keyboard = [
-            [InlineKeyboardButton("Yes", callback_data=f"{field_name}_Yes")],
-            [InlineKeyboardButton("No", callback_data=f"{field_name}_No")],
-        ]
+    if field_name == "ARE YOU A NEW MEM":
         await context.bot.send_message(
             chat_id=chat_id,
             text="Are you a new member?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=_build_option_keyboard(["Yes", "No"], prefix=f"{field_name}_"),
         )
         return AWAITING_SUBUNIT
 
-    keyboard = [
-        [InlineKeyboardButton(option, callback_data=f"{field_name}_{option}")]
-        for option in field_info["options"]
-    ]
+    row_size = 1 if field_name == "PROGRAM" else 2
     await context.bot.send_message(
         chat_id=chat_id,
         text=f"Select your {field_name}:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=_build_option_keyboard(field_info["options"], prefix=f"{field_name}_", row_size=row_size),
     )
     if field_name == "GENDER":
         return AWAITING_GENDER
     if field_name == "COLLEGE":
         return AWAITING_COLLEGE
     return AWAITING_SUBUNIT
+
+
+async def dob_year_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    year = query.data.removeprefix("dob_year_")
+    context.user_data[DOB_YEAR_KEY] = year
+
+    months = [
+        "JAN",
+        "FEB",
+        "MAR",
+        "APR",
+        "MAY",
+        "JUN",
+        "JUL",
+        "AUG",
+        "SEP",
+        "OCT",
+        "NOV",
+        "DEC",
+    ]
+    await query.edit_message_text(
+        text=f"Selected YEAR: {year}\nNow select your birth month:",
+        reply_markup=_build_option_keyboard(months, prefix="dob_month_", row_size=3),
+    )
+    return AWAITING_DOB_MONTH
+
+
+async def dob_month_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    month_text = query.data.removeprefix("dob_month_")
+    month_map = {
+        "JAN": 1,
+        "FEB": 2,
+        "MAR": 3,
+        "APR": 4,
+        "MAY": 5,
+        "JUN": 6,
+        "JUL": 7,
+        "AUG": 8,
+        "SEP": 9,
+        "OCT": 10,
+        "NOV": 11,
+        "DEC": 12,
+    }
+    month = month_map[month_text]
+    context.user_data[DOB_MONTH_KEY] = month
+
+    year = int(context.user_data[DOB_YEAR_KEY])
+    max_days = calendar.monthrange(year, month)[1]
+    day_options = [f"{day:02d}" for day in range(1, max_days + 1)]
+
+    await query.edit_message_text(
+        text=f"Selected MONTH: {month_text}\nNow select your birth day:",
+        reply_markup=_build_option_keyboard(day_options, prefix="dob_day_", row_size=7),
+    )
+    return AWAITING_DOB_DAY
+
+
+async def dob_day_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    day_text = query.data.removeprefix("dob_day_")
+    context.user_data[DOB_DAY_KEY] = int(day_text)
+
+    year = int(context.user_data[DOB_YEAR_KEY])
+    month = int(context.user_data[DOB_MONTH_KEY])
+    day = int(context.user_data[DOB_DAY_KEY])
+    formatted_dob = f"{month:02d}-{day:02d}-{year}"
+
+    _registration_data(context)["DATE OF BIRTH"] = formatted_dob
+    context.user_data[REGISTRATION_INDEX_KEY] = context.user_data.get(REGISTRATION_INDEX_KEY, 0) + 1
+    context.user_data.pop(DOB_YEAR_KEY, None)
+    context.user_data.pop(DOB_MONTH_KEY, None)
+    context.user_data.pop(DOB_DAY_KEY, None)
+
+    await query.edit_message_text(text=f"Selected DATE OF BIRTH: {formatted_dob}")
+    return await _send_next_registration_field(update, context)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,61 +336,24 @@ async def semester_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_year = datetime.now().year
     sheets_service = _sheets_service(context)
 
-    if semester == "Alpha":
-        existing_user = sheets_service.get_user_by_telegram_id(
-            user_id,
-            semester="Alpha",
-            year=current_year,
+    existing_user = sheets_service.get_user_by_telegram_id(
+        user_id,
+        semester=semester,
+        year=current_year,
+    )
+    if existing_user:
+        await query.edit_message_text(f"You are already registered for {semester} semester.")
+        return await _show_group_links(
+            update,
+            context,
+            existing_user,
+            "Here are your group links:",
         )
-        if existing_user:
-            await query.edit_message_text("You are already registered for Alpha semester.")
-            return await _show_group_links(
-                update,
-                context,
-                existing_user,
-                "Here are your group links:",
-            )
-        context.user_data[SEMESTER_KEY] = "Alpha"
-        await query.edit_message_text("You chose Alpha semester.")
-    else:
-        existing_user = sheets_service.get_user_by_telegram_id(
-            user_id,
-            semester="Omega",
-            year=current_year,
-        )
-        if existing_user:
-            await query.edit_message_text("You are already registered for Omega semester.")
-            return await _show_group_links(
-                update,
-                context,
-                existing_user,
-                "Here are your group links:",
-            )
-        keyboard = [
-            [InlineKeyboardButton("Yes", callback_data="registered_alpha_Yes")],
-            [InlineKeyboardButton("No", callback_data="registered_alpha_No")],
-        ]
-        await query.edit_message_text(
-            "Did you register for Alpha semester?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
-        return AWAITING_REGISTERED_ALPHA
 
+    context.user_data[SEMESTER_KEY] = semester
+    await query.edit_message_text(f"You chose {semester} semester.")
     context.user_data[REGISTRATION_DATA_KEY] = {}
     context.user_data[REGISTRATION_INDEX_KEY] = 0
-    return await _send_next_registration_field(update, context)
-
-
-async def registered_alpha_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    choice = query.data.split("_", 2)[2]
-    context.user_data[SEMESTER_KEY] = "Omega" if choice == "Yes" else "Both"
-    context.user_data[REGISTRATION_DATA_KEY] = {}
-    context.user_data[REGISTRATION_INDEX_KEY] = 0
-
-    await query.edit_message_text(f"You chose {choice}.")
     return await _send_next_registration_field(update, context)
 
 
@@ -299,20 +366,6 @@ async def reg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_field_info = REG_FIELDS_CONFIG[field_idx]
     current_field_name = current_field_info["name"]
     input_text = (update.message.text or "").strip()
-
-    if current_field_name == "DATE OF BIRTH":
-        if not re.match(r"^(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])-\d{4}$", input_text):
-            await update.message.reply_text(
-                "Invalid date format. Please use MM-DD-YYYY (e.g., 01-23-2000)."
-            )
-            return REG_FIELD_INPUT
-        try:
-            datetime.strptime(input_text, "%m-%d-%Y")
-        except ValueError:
-            await update.message.reply_text(
-                "Invalid date. Please enter a real date in MM-DD-YYYY format."
-            )
-            return REG_FIELD_INPUT
 
     registration_data[current_field_name] = input_text
     context.user_data[REGISTRATION_INDEX_KEY] = field_idx + 1

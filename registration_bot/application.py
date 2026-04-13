@@ -18,9 +18,11 @@ from registration_bot.constants import (
     AWAITING_FORM_STATUS,
     AWAITING_COLLEGE,
     AWAITING_CONTACT,
+    AWAITING_DOB_DAY,
+    AWAITING_DOB_MONTH,
+    AWAITING_DOB_YEAR,
     AWAITING_GENDER,
     AWAITING_REG_NO_CHECK,
-    AWAITING_REGISTERED_ALPHA,
     AWAITING_SEMESTER,
     AWAITING_SUBUNIT,
     REG_FIELD_INPUT,
@@ -83,11 +85,14 @@ def create_bot_application(
             AWAITING_SEMESTER: [
                 CallbackQueryHandler(registration_handlers.semester_choice, pattern=r"^semester_")
             ],
-            AWAITING_REGISTERED_ALPHA: [
-                CallbackQueryHandler(
-                    registration_handlers.registered_alpha_choice,
-                    pattern=r"^registered_alpha_",
-                )
+            AWAITING_DOB_YEAR: [
+                CallbackQueryHandler(registration_handlers.dob_year_choice, pattern=r"^dob_year_")
+            ],
+            AWAITING_DOB_MONTH: [
+                CallbackQueryHandler(registration_handlers.dob_month_choice, pattern=r"^dob_month_")
+            ],
+            AWAITING_DOB_DAY: [
+                CallbackQueryHandler(registration_handlers.dob_day_choice, pattern=r"^dob_day_")
             ],
             REG_FIELD_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, registration_handlers.reg_handler)
@@ -107,7 +112,7 @@ def create_bot_application(
             AWAITING_SUBUNIT: [
                 CallbackQueryHandler(
                     registration_handlers.handle_inline_keyboard_input,
-                    pattern=r"^SUBUNIT_",
+                    pattern=r"^(PROGRAM_|LEVEL_|HALL_|SUBUNIT_|ARE YOU A NEW MEM_)",
                 )
             ],
             AWAITING_CONTACT: [

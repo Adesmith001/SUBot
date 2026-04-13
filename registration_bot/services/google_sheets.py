@@ -28,7 +28,8 @@ USER_COLUMNS = [
     "PROGRAM",
     "LEVEL",
     "SUBUNIT",
-    "HALL & ROOM NUMBER",
+    "HALL",
+    "ROOM NUMBER",
     "ARE YOU A NEW MEM",
     "TELEGRAM USER ID",
     "TELEGRAM NUMBER",
@@ -198,9 +199,12 @@ class GoogleSheetsService:
                 if record["Type"] == "General":
                     return record.get("Link")
             return None
-
+        target_subunit = self._normalize_lookup_value(subunit)
         for record in records:
-            if record["Type"] == "Subunit" and record.get("Name") == subunit:
+            if record["Type"] != "Subunit":
+                continue
+            record_name = self._normalize_lookup_value(record.get("Name"))
+            if record_name == target_subunit:
                 return record.get("Link")
         return None
 
@@ -236,8 +240,20 @@ class GoogleSheetsService:
         normalized_user_data = {
             self._normalize_header_key(key): value for key, value in user_data.items()
         }
-        hall_room = user_data.get("HALL & ROOM NUMBER", "")
-        hall, room = self._split_hall_and_room(hall_room)
+        new_member_value = (
+            normalized_user_data.get("AREYOUANEWMEM")
+            or normalized_user_data.get("AREYOUANEWMEMBER")
+        )
+        explicit_hall = str(user_data.get("HALL", "")).strip()
+        explicit_room = str(user_data.get("ROOM NUMBER", "")).strip()
+        hall_room = str(user_data.get("HALL & ROOM NUMBER", "")).strip()
+
+        if not hall_room and (explicit_hall or explicit_room):
+            hall_room = f"{explicit_hall} {explicit_room}".strip()
+
+        split_hall, split_room = self._split_hall_and_room(hall_room)
+        hall = explicit_hall or split_hall
+        room = explicit_room or split_room
         timestamp_value = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
         year_value = str(self._current_year())
 
@@ -254,6 +270,8 @@ class GoogleSheetsService:
                 values.append(room)
             elif normalized_header == "YEAR":
                 values.append(year_value)
+            elif normalized_header in {"AREYOUANEWMEM", "AREYOUANEWMEMBER"}:
+                values.append(new_member_value or "")
             elif normalized_header in normalized_user_data:
                 values.append(normalized_user_data[normalized_header])
             else:
