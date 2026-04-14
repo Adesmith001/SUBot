@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Callable
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - fallback for older Python versions
+    ZoneInfo = None
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -16,7 +20,8 @@ SendMessageFunc = Callable[[str, str], None]
 class SchedulerService:
     def __init__(self, sheets_service: GoogleSheetsService):
         self.sheets_service = sheets_service
-        self.scheduler = BackgroundScheduler()
+        timezone = ZoneInfo("Africa/Lagos") if ZoneInfo else None
+        self.scheduler = BackgroundScheduler(timezone=timezone) if timezone else BackgroundScheduler()
         self.reminders: list[dict[str, object]] = []
         self.send_message_func: SendMessageFunc | None = None
         self.started = False
@@ -33,6 +38,55 @@ class SchedulerService:
                     str(user["TELEGRAM USER ID"]),
                     f"Happy Birthday, {user['OTHER NAMES']}!",
                 )
+
+    def _broadcast_to_user_ids(self, user_ids: list[str], message: str) -> None:
+        if not self.send_message_func:
+            return
+        for user_id in user_ids:
+            self.send_message_func(str(user_id), message)
+
+    def _broadcast_to_all_users(self, message: str) -> None:
+        self._broadcast_to_user_ids(self.sheets_service.get_all_telegram_ids(), message)
+
+    def _broadcast_to_colleges(self, colleges: list[str], message: str) -> None:
+        user_ids = self.sheets_service.get_telegram_ids_by_colleges(colleges)
+        self._broadcast_to_user_ids(user_ids, message)
+
+    def send_coe_clds_preservice_reminder(self) -> None:
+        self._broadcast_to_colleges(
+            ["COE", "CLDS"],
+            (
+                "Reminder for COE/CLDS: Pre-service holds at Joy Gallery today from "
+                "7:00am to 7:25am. Please be punctual."
+            ),
+        )
+
+    def send_cmss_cst_preservice_reminder(self) -> None:
+        self._broadcast_to_colleges(
+            ["CMSS", "CST"],
+            (
+                "Reminder for CMSS/CST: Pre-service holds at Joy Gallery today from "
+                "7:00am to 7:25am. Please be punctual."
+            ),
+        )
+
+    def send_prayer_meeting_reminder(self) -> None:
+        self._broadcast_to_all_users(
+            "Reminder: Prayer meeting is today by 6:00pm at the back of the shuttle stand."
+        )
+
+    def send_monday_cleaning_reminder(self) -> None:
+        self._broadcast_to_all_users(
+            "Reminder: Cleaning is today by 6:30pm."
+        )
+
+    def send_bible_study_and_cleaning_reminder(self) -> None:
+        self._broadcast_to_all_users(
+            (
+                "Reminder: Bible Study is by 2:00pm opposite Peace entrance, "
+                "and cleaning follows by 3:00pm."
+            )
+        )
 
     def send_reminders(self) -> None:
         now = datetime.now()
@@ -73,6 +127,73 @@ class SchedulerService:
         if self.started:
             return
         self.scheduler.add_job(self.check_birthdays, "cron", hour=7, minute=0)
+
+        # Monday 5pm and Tuesday 4am reminders for COE/CLDS.
+        self.scheduler.add_job(
+            self.send_coe_clds_preservice_reminder,
+            "cron",
+            day_of_week="mon",
+            hour=17,
+            minute=0,
+        )
+        self.scheduler.add_job(
+            self.send_coe_clds_preservice_reminder,
+            "cron",
+            day_of_week="tue",
+            hour=4,
+            minute=0,
+        )
+
+        # Wednesday 5pm and Thursday 4am reminders for CMSS/CST.
+        self.scheduler.add_job(
+            self.send_cmss_cst_preservice_reminder,
+            "cron",
+            day_of_week="wed",
+            hour=17,
+            minute=0,
+        )
+        self.scheduler.add_job(
+            self.send_cmss_cst_preservice_reminder,
+            "cron",
+            day_of_week="thu",
+            hour=4,
+            minute=0,
+        )
+
+        # Thursday 2pm reminder for prayer meeting by 6pm.
+        self.scheduler.add_job(
+            self.send_prayer_meeting_reminder,
+            "cron",
+            day_of_week="thu",
+            hour=14,
+            minute=0,
+        )
+
+        # Monday 2pm reminder for cleaning by 6:30pm.
+        self.scheduler.add_job(
+            self.send_monday_cleaning_reminder,
+            "cron",
+            day_of_week="mon",
+            hour=14,
+            minute=0,
+        )
+
+        # Friday 7pm and Saturday 10am reminders for Bible Study and cleaning.
+        self.scheduler.add_job(
+            self.send_bible_study_and_cleaning_reminder,
+            "cron",
+            day_of_week="fri",
+            hour=19,
+            minute=0,
+        )
+        self.scheduler.add_job(
+            self.send_bible_study_and_cleaning_reminder,
+            "cron",
+            day_of_week="sat",
+            hour=10,
+            minute=0,
+        )
+
         self.scheduler.add_job(self.send_reminders, "interval", minutes=1)
         self.scheduler.start()
         self.started = True

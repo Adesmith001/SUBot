@@ -38,6 +38,15 @@ DOB_YEAR_KEY = "dob_year"
 DOB_MONTH_KEY = "dob_month"
 DOB_DAY_KEY = "dob_day"
 
+MEETING_TIMES_REMINDER = (
+    "Meeting Times Reminder:\n"
+    "1. Monday: Cleaning by 6:30pm.\n"
+    "2. Tuesday: Pre-service (COE/CLDS) by 7:00am to 7:25am at Joy Gallery.\n"
+    "3. Thursday: Pre-service (CMSS/CST) by 7:00am to 7:25am at Joy Gallery.\n"
+    "4. Thursday: Prayer meeting by 6:00pm at the back of the shuttle stand.\n"
+    "5. Saturday: Bible Study by 2:00pm opposite Peace entrance and cleaning by 3:00pm."
+)
+
 
 def _sheets_service(context: ContextTypes.DEFAULT_TYPE):
     return context.application.bot_data["sheets_service"]
@@ -108,6 +117,7 @@ async def _show_group_links(
     context: ContextTypes.DEFAULT_TYPE,
     user_record: dict,
     intro_text: str,
+    include_existing_member_reminder: bool = True,
 ):
     sheets_service = _sheets_service(context)
     subunit = user_record.get("SUBUNIT")
@@ -123,8 +133,32 @@ async def _show_group_links(
         ),
         reply_markup=ReplyKeyboardRemove(),
     )
+    if include_existing_member_reminder and str(user_record.get("ARE YOU A NEW MEM", "")).strip().lower() == "no":
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=MEETING_TIMES_REMINDER,
+        )
     _clear_registration_state(context)
     return ConversationHandler.END
+
+
+def _new_member_welcome_message() -> str:
+    return (
+        "Welcome to Sanctuary Unit.\n\n"
+        "We are glad to have you in this family. Please stay active, committed, and available for service.\n\n"
+        "How to settle in quickly:\n"
+        "1. Stay active in your assigned subunit.\n"
+        "2. Attend unit meetings consistently.\n"
+        "3. Join the unit communication channels and stay updated.\n"
+        "4. Reach out to the executives anytime you need guidance.\n\n"
+        "Meeting Days/Times:\n"
+        "1. Monday: Cleaning by 6:30pm.\n"
+        "2. Tuesday: Pre-service (COE/CLDS) by 7:00am to 7:25am at Joy Gallery.\n"
+        "3. Thursday: Pre-service (CMSS/CST) by 7:00am to 7:25am at Joy Gallery.\n"
+        "4. Thursday: Prayer meeting by 6:00pm at the back of the shuttle stand.\n"
+        "5. Saturday: Bible Study by 2:00pm opposite Peace entrance and cleaning by 3:00pm.\n\n"
+        "We love you and we are happy to serve with you. Welcome once again."
+    )
 
 
 async def _send_next_registration_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -411,11 +445,24 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheets_service = _sheets_service(context)
     sheets_service.add_user(registration_data)
 
+    is_new_member = str(registration_data.get("ARE YOU A NEW MEM", "")).strip().lower() == "yes"
+    if is_new_member:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=_new_member_welcome_message(),
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=MEETING_TIMES_REMINDER,
+        )
+
     return await _show_group_links(
         update,
         context,
         registration_data,
         "Registration complete! Here are your group links:",
+        include_existing_member_reminder=False,
     )
 
 

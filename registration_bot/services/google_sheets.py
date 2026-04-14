@@ -37,6 +37,13 @@ USER_COLUMNS = [
 
 HEADER_ROW = USER_COLUMNS[:]
 FORM_RESPONSE_SHEET_CANDIDATES = ("Form Responses 1", "Form Response 1")
+COLLEGE_CODE_ALIASES = {
+    "COLLEGE OF SCIENCE AND TECHNOLOGY": "CST",
+    "COLLEGE OF ENGINEERING": "COE",
+    "COLLEGE OF LEADERSIP DEVELOPEMENT STUDIES": "CLDS",
+    "COLLEGE OF LEADERSHIP DEVELOPMENT STUDIES": "CLDS",
+    "COLLEGE OF MANAGEMENT AND SOCIAL SCIENCE": "CMSS",
+}
 
 
 class GoogleSheetsService:
@@ -45,6 +52,7 @@ class GoogleSheetsService:
         self.client = gspread.authorize(self._load_credentials())
         self.spreadsheet = self.client.open_by_key(settings.spreadsheet_key)
         self.registration_sheet = self._get_or_create_registration_sheet()
+        self._ensure_registration_headers()
         self.links_sheet = self._get_or_create_links_sheet()
 
     def _load_credentials(self) -> ServiceAccountCredentials:
@@ -104,6 +112,26 @@ class GoogleSheetsService:
         )
         worksheet.append_row(HEADER_ROW)
         return worksheet
+
+    def _ensure_registration_headers(self) -> None:
+        headers = self.registration_sheet.row_values(1)
+        if not headers:
+            self.registration_sheet.append_row(HEADER_ROW)
+            headers = self.registration_sheet.row_values(1)
+
+        normalized_headers = {self._normalize_header_key(header) for header in headers}
+        required_columns = ["TELEGRAM USER ID", "SEMESTER", "YEAR"]
+        missing_columns = [
+            column
+            for column in required_columns
+            if self._normalize_header_key(column) not in normalized_headers
+        ]
+
+        if not missing_columns:
+            return
+
+        updated_headers = headers + missing_columns
+        self.registration_sheet.update("A1", [updated_headers])
 
     def _all_user_data_sheets(self):
         unique_by_title = {}
@@ -178,6 +206,23 @@ class GoogleSheetsService:
     def get_all_telegram_ids(self) -> list[str]:
         return [str(user["TELEGRAM USER ID"]) for user in self.get_all_unique_users()]
 
+    def get_telegram_ids_by_colleges(self, colleges: list[str]) -> list[str]:
+        target_colleges = {self._normalize_college_code(college) for college in colleges}
+        target_colleges.discard("")
+
+        telegram_ids = []
+        seen_ids = set()
+        for user in self.get_all_unique_users():
+            telegram_id = str(user.get("TELEGRAM USER ID", "")).strip()
+            if not telegram_id or telegram_id in seen_ids:
+                continue
+
+            user_college = self._normalize_college_code(user.get("COLLEGE"))
+            if user_college in target_colleges:
+                telegram_ids.append(telegram_id)
+                seen_ids.add(telegram_id)
+        return telegram_ids
+
     def set_group_chat_link(self, group_type: str, link: str) -> None:
         if group_type == "General":
             self.set_link("General", "", link)
@@ -196,12 +241,14 @@ class GoogleSheetsService:
         records = self.links_sheet.get_all_records()
         if subunit is None:
             for record in records:
-                if record["Type"] == "General":
+                record_type = self._normalize_lookup_value(record.get("Type"))
+                if record_type == "GENERAL":
                     return record.get("Link")
             return None
         target_subunit = self._normalize_lookup_value(subunit)
         for record in records:
-            if record["Type"] != "Subunit":
+            record_type = self._normalize_lookup_value(record.get("Type"))
+            if record_type != "SUBUNIT":
                 continue
             record_name = self._normalize_lookup_value(record.get("Name"))
             if record_name == target_subunit:
@@ -220,6 +267,13 @@ class GoogleSheetsService:
         if value is None:
             return ""
         return " ".join(str(value).strip().upper().split())
+
+    @classmethod
+    def _normalize_college_code(cls, value: Any) -> str:
+        normalized = cls._normalize_lookup_value(value)
+        if not normalized:
+            return ""
+        return COLLEGE_CODE_ALIASES.get(normalized, normalized)
 
     @classmethod
     def _normalize_header_key(cls, value: Any) -> str:
